@@ -1741,6 +1741,33 @@ static command_result GetUnitListInside(color_ostream &stream, const BlockReques
             send_unit->set_name(DF2UTF(Translation::TranslateName(Units::getVisibleName(unit))));
         }
 
+        df::job * current_job = unit->job.current_job;
+        if (current_job)
+        {
+            send_unit->mutable_current_job()->set_id(current_job->id);
+            send_unit->mutable_current_job()->set_type(current_job->job_type);
+            send_unit->mutable_current_job()->set_subtype(current_job->job_subtype);
+            send_unit->mutable_current_job()->set_flags(current_job->flags.whole);
+            send_unit->mutable_current_job()->mutable_material()->set_mat_type(current_job->mat_type);
+            send_unit->mutable_current_job()->mutable_material()->set_mat_index(current_job->mat_index);
+            send_unit->mutable_current_job()->set_histfig_id(current_job->hist_figure_id);
+            send_unit->mutable_current_job()->set_material_category(current_job->material_category.whole);
+            send_unit->mutable_current_job()->set_reaction_name(current_job->reaction_name);
+            for (df::job_item_ref* job_item : current_job->items)
+            {
+                auto send_item = send_unit->mutable_current_job()->add_items();
+                CopyItem(send_item, job_item->item);
+            }
+        }
+
+        df::map_block * map_block = Maps::getTileBlock(unit->pos);
+        if (map_block) {
+            const df::tile_designation &designation = map_block->designation[unit->pos.x % 16][unit->pos.y % 16];
+            send_unit->set_light(designation.bits.light);
+            send_unit->set_subterranean(designation.bits.subterranean);
+            send_unit->set_outside(designation.bits.outside);
+        }
+
         auto appearance = send_unit->mutable_appearance();
         for (size_t j = 0; j < unit->appearance.body_modifiers.size(); j++)
             appearance->add_body_modifiers(unit->appearance.body_modifiers[j]);

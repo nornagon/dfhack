@@ -556,7 +556,7 @@ string Units::getDescription(df::unit* unit)
     CHECK_NULL_POINTER(unit);
     string str;
     df_unit_physical_description(unit, &str);
-    return str;
+    return DF2UTF(str);
 }
 
 // get plural of race name (used for display in autobutcher UI and for sorting the watchlist)
