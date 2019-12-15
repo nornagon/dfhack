@@ -145,6 +145,7 @@ static command_result GetTiletypeList(color_ostream &stream, const EmptyMessage 
 static command_result GetBlockList(color_ostream &stream, const BlockRequest *in, BlockList *out);
 static command_result GetPlantList(color_ostream &stream, const BlockRequest *in, PlantList *out);
 static command_result CheckHashes(color_ostream &stream, const EmptyMessage *in);
+static command_result GetUnits(color_ostream &stream, const UnitRequest *in, UnitList *out);
 static command_result GetUnitList(color_ostream &stream, const EmptyMessage *in, UnitList *out);
 static command_result GetUnitListInside(color_ostream &stream, const BlockRequest *in, UnitList *out);
 static command_result GetViewInfo(color_ostream &stream, const EmptyMessage *in, ViewInfo *out);
@@ -170,6 +171,7 @@ static command_result GetLanguage(color_ostream & stream, const EmptyMessage * i
 
 
 void CopyBlock(df::map_block * DfBlock, RemoteFortressReader::MapBlock * NetBlock, MapExtras::MapCache * MC, DFCoord pos);
+void CopyUnit(RemoteFortressReader::UnitDefinition * send_unit, df::unit * unit);
 
 const char* growth_locations[] = {
     "TWIGS",
@@ -300,6 +302,7 @@ DFhackCExport RPCService *plugin_rpcconnect(color_ostream &)
     svc->addFunction("CheckHashes", CheckHashes, SF_ALLOW_REMOTE);
     svc->addFunction("GetTiletypeList", GetTiletypeList, SF_ALLOW_REMOTE);
     svc->addFunction("GetPlantList", GetPlantList, SF_ALLOW_REMOTE);
+    svc->addFunction("GetUnits", GetUnits, SF_ALLOW_REMOTE);
     svc->addFunction("GetUnitList", GetUnitList, SF_ALLOW_REMOTE);
     svc->addFunction("GetUnitListInside", GetUnitListInside, SF_ALLOW_REMOTE);
     svc->addFunction("GetViewInfo", GetViewInfo, SF_ALLOW_REMOTE);
@@ -1697,6 +1700,19 @@ static command_result GetPlantList(color_ostream &stream, const BlockRequest *in
     return CR_OK;
 }
 
+static command_result GetUnits(color_ostream &stream, const UnitRequest *in, UnitList *out)
+{
+    auto world = df::global::world;
+    for (int i = 0; i < in->unit_ids().size(); i++)
+    {
+        df::unit * unit = Units::getUnit(Units::findIndexById(in->unit_ids().Get(i)));
+        if (!unit) continue;
+        auto send_unit = out->add_creature_list();
+        CopyUnit(send_unit, unit);
+    }
+    return CR_OK;
+}
+
 static command_result GetUnitList(color_ostream &stream, const EmptyMessage *in, UnitList *out)
 {
     return GetUnitListInside(stream, NULL, out);
@@ -1708,13 +1724,6 @@ static command_result GetUnitListInside(color_ostream &stream, const BlockReques
     for (size_t i = 0; i < world->units.all.size(); i++)
     {
         df::unit * unit = world->units.all[i];
-        auto send_unit = out->add_creature_list();
-        send_unit->set_id(unit->id);
-        send_unit->set_pos_x(unit->pos.x);
-        send_unit->set_pos_y(unit->pos.y);
-        send_unit->set_pos_z(unit->pos.z);
-        send_unit->mutable_race()->set_mat_type(unit->race);
-        send_unit->mutable_race()->set_mat_index(unit->caste);
         if (in != NULL)
         {
             if (unit->pos.z < in->min_z() || unit->pos.z >= in->max_z())
@@ -1724,136 +1733,148 @@ static command_result GetUnitListInside(color_ostream &stream, const BlockReques
             if (unit->pos.y < in->min_y() * 16 || unit->pos.y >= in->max_y() * 16)
                 continue;
         }
-        ConvertDfColor(Units::getProfessionColor(unit), send_unit->mutable_profession_color());
-        send_unit->set_flags1(unit->flags1.whole);
-        send_unit->set_flags2(unit->flags2.whole);
-        send_unit->set_flags3(unit->flags3.whole);
-        send_unit->set_is_soldier(ENUM_ATTR(profession, military, unit->profession));
-        auto size_info = send_unit->mutable_size_info();
-        size_info->set_size_cur(unit->body.size_info.size_cur);
-        size_info->set_size_base(unit->body.size_info.size_base);
-        size_info->set_area_cur(unit->body.size_info.area_cur);
-        size_info->set_area_base(unit->body.size_info.area_base);
-        size_info->set_length_cur(unit->body.size_info.length_cur);
-        size_info->set_length_base(unit->body.size_info.length_base);
-        if (unit->name.has_name)
-        {
-            send_unit->set_name(DF2UTF(Translation::TranslateName(Units::getVisibleName(unit))));
-        }
-
-        df::job * current_job = unit->job.current_job;
-        if (current_job)
-        {
-            send_unit->mutable_current_job()->set_id(current_job->id);
-            send_unit->mutable_current_job()->set_type(current_job->job_type);
-            send_unit->mutable_current_job()->set_subtype(current_job->job_subtype);
-            send_unit->mutable_current_job()->set_flags(current_job->flags.whole);
-            send_unit->mutable_current_job()->mutable_material()->set_mat_type(current_job->mat_type);
-            send_unit->mutable_current_job()->mutable_material()->set_mat_index(current_job->mat_index);
-            send_unit->mutable_current_job()->set_histfig_id(current_job->hist_figure_id);
-            send_unit->mutable_current_job()->set_material_category(current_job->material_category.whole);
-            send_unit->mutable_current_job()->set_reaction_name(current_job->reaction_name);
-            for (df::job_item_ref* job_item : current_job->items)
-            {
-                auto send_item = send_unit->mutable_current_job()->add_items();
-                CopyItem(send_item, job_item->item);
-            }
-        }
-
-        df::map_block * map_block = Maps::getTileBlock(unit->pos);
-        if (map_block) {
-            const df::tile_designation &designation = map_block->designation[unit->pos.x % 16][unit->pos.y % 16];
-            send_unit->set_light(designation.bits.light);
-            send_unit->set_subterranean(designation.bits.subterranean);
-            send_unit->set_outside(designation.bits.outside);
-        }
-
-        auto appearance = send_unit->mutable_appearance();
-        for (size_t j = 0; j < unit->appearance.body_modifiers.size(); j++)
-            appearance->add_body_modifiers(unit->appearance.body_modifiers[j]);
-        for (size_t j = 0; j < unit->appearance.bp_modifiers.size(); j++)
-            appearance->add_bp_modifiers(unit->appearance.bp_modifiers[j]);
-        for (size_t j = 0; j < unit->appearance.colors.size(); j++)
-            appearance->add_colors(unit->appearance.colors[j]);
-        appearance->set_size_modifier(unit->appearance.size_modifier);
-
-        appearance->set_physical_description(Units::getPhysicalDescription(unit));
-
-        send_unit->set_profession_id(unit->profession);
-
-        std::vector<Units::NoblePosition> pvec;
-
-        if (Units::getNoblePositions(&pvec, unit))
-        {
-            for (size_t j = 0; j < pvec.size(); j++)
-            {
-                auto noble_positon = pvec[j];
-                send_unit->add_noble_positions(noble_positon.position->code);
-            }
-        }
-
-        send_unit->set_rider_id(unit->relationship_ids[df::unit_relationship_type::RiderMount]);
-
-        auto creatureRaw = world->raws.creatures.all[unit->race];
-        auto casteRaw = creatureRaw->caste[unit->caste];
-
-        for (size_t j = 0; j < unit->appearance.tissue_style_type.size(); j++)
-        {
-            auto type = unit->appearance.tissue_style_type[j];
-            if (type < 0)
-                continue;
-            int style_raw_index = binsearch_index(casteRaw->tissue_styles, &df::tissue_style_raw::id, type);
-            auto styleRaw = casteRaw->tissue_styles[style_raw_index];
-            if (styleRaw->token == "HAIR")
-            {
-                auto send_style = appearance->mutable_hair();
-                send_style->set_length(unit->appearance.tissue_length[j]);
-                send_style->set_style((HairStyle)unit->appearance.tissue_style[j]);
-            }
-            else if (styleRaw->token == "BEARD")
-            {
-                auto send_style = appearance->mutable_beard();
-                send_style->set_length(unit->appearance.tissue_length[j]);
-                send_style->set_style((HairStyle)unit->appearance.tissue_style[j]);
-            }
-            else if (styleRaw->token == "MOUSTACHE")
-            {
-                auto send_style = appearance->mutable_moustache();
-                send_style->set_length(unit->appearance.tissue_length[j]);
-                send_style->set_style((HairStyle)unit->appearance.tissue_style[j]);
-            }
-            else if (styleRaw->token == "SIDEBURNS")
-            {
-                auto send_style = appearance->mutable_sideburns();
-                send_style->set_length(unit->appearance.tissue_length[j]);
-                send_style->set_style((HairStyle)unit->appearance.tissue_style[j]);
-            }
-        }
-
-        for (size_t j = 0; j < unit->inventory.size(); j++)
-        {
-            auto inventory_item = unit->inventory[j];
-            auto sent_item = send_unit->add_inventory();
-            sent_item->set_mode((InventoryMode)inventory_item->mode);
-            CopyItem(sent_item->mutable_item(), inventory_item->item);
-        }
-
-        if (unit->flags1.bits.projectile)
-        {
-            for (auto proj = world->proj_list.next; proj != NULL; proj = proj->next)
-            {
-                STRICT_VIRTUAL_CAST_VAR(item, df::proj_unitst, proj->item);
-                if (item == NULL)
-                    continue;
-                if (item->unit != unit)
-                    continue;
-                send_unit->set_subpos_x(item->pos_x / 100000.0);
-                send_unit->set_subpos_y(item->pos_y / 100000.0);
-                send_unit->set_subpos_z(item->pos_z / 140000.0);
-            }
-        }
+        auto send_unit = out->add_creature_list();
+        CopyUnit(send_unit, unit);
     }
     return CR_OK;
+}
+
+void CopyUnit(RemoteFortressReader::UnitDefinition * send_unit, df::unit * unit)
+{
+    send_unit->set_id(unit->id);
+    send_unit->set_pos_x(unit->pos.x);
+    send_unit->set_pos_y(unit->pos.y);
+    send_unit->set_pos_z(unit->pos.z);
+    send_unit->mutable_race()->set_mat_type(unit->race);
+    send_unit->mutable_race()->set_mat_index(unit->caste);
+    ConvertDfColor(Units::getProfessionColor(unit), send_unit->mutable_profession_color());
+    send_unit->set_flags1(unit->flags1.whole);
+    send_unit->set_flags2(unit->flags2.whole);
+    send_unit->set_flags3(unit->flags3.whole);
+    send_unit->set_is_soldier(ENUM_ATTR(profession, military, unit->profession));
+    auto size_info = send_unit->mutable_size_info();
+    size_info->set_size_cur(unit->body.size_info.size_cur);
+    size_info->set_size_base(unit->body.size_info.size_base);
+    size_info->set_area_cur(unit->body.size_info.area_cur);
+    size_info->set_area_base(unit->body.size_info.area_base);
+    size_info->set_length_cur(unit->body.size_info.length_cur);
+    size_info->set_length_base(unit->body.size_info.length_base);
+    if (unit->name.has_name)
+    {
+        send_unit->set_name(DF2UTF(Translation::TranslateName(Units::getVisibleName(unit))));
+    }
+
+    df::job * current_job = unit->job.current_job;
+    if (current_job)
+    {
+        send_unit->mutable_current_job()->set_id(current_job->id);
+        send_unit->mutable_current_job()->set_type(current_job->job_type);
+        send_unit->mutable_current_job()->set_subtype(current_job->job_subtype);
+        send_unit->mutable_current_job()->set_flags(current_job->flags.whole);
+        send_unit->mutable_current_job()->mutable_material()->set_mat_type(current_job->mat_type);
+        send_unit->mutable_current_job()->mutable_material()->set_mat_index(current_job->mat_index);
+        send_unit->mutable_current_job()->set_histfig_id(current_job->hist_figure_id);
+        send_unit->mutable_current_job()->set_material_category(current_job->material_category.whole);
+        send_unit->mutable_current_job()->set_reaction_name(current_job->reaction_name);
+        for (df::job_item_ref* job_item : current_job->items)
+        {
+            auto send_item = send_unit->mutable_current_job()->add_items();
+            CopyItem(send_item, job_item->item);
+        }
+    }
+
+    df::map_block * map_block = Maps::getTileBlock(unit->pos);
+    if (map_block) {
+        const df::tile_designation &designation = map_block->designation[unit->pos.x % 16][unit->pos.y % 16];
+        send_unit->set_light(designation.bits.light);
+        send_unit->set_subterranean(designation.bits.subterranean);
+        send_unit->set_outside(designation.bits.outside);
+    }
+
+    auto appearance = send_unit->mutable_appearance();
+    for (size_t j = 0; j < unit->appearance.body_modifiers.size(); j++)
+        appearance->add_body_modifiers(unit->appearance.body_modifiers[j]);
+    for (size_t j = 0; j < unit->appearance.bp_modifiers.size(); j++)
+        appearance->add_bp_modifiers(unit->appearance.bp_modifiers[j]);
+    for (size_t j = 0; j < unit->appearance.colors.size(); j++)
+        appearance->add_colors(unit->appearance.colors[j]);
+    appearance->set_size_modifier(unit->appearance.size_modifier);
+
+    appearance->set_physical_description(Units::getPhysicalDescription(unit));
+
+    send_unit->set_profession_id(unit->profession);
+
+    std::vector<Units::NoblePosition> pvec;
+
+    if (Units::getNoblePositions(&pvec, unit))
+    {
+        for (size_t j = 0; j < pvec.size(); j++)
+        {
+            auto noble_positon = pvec[j];
+            send_unit->add_noble_positions(noble_positon.position->code);
+        }
+    }
+
+    send_unit->set_rider_id(unit->relationship_ids[df::unit_relationship_type::RiderMount]);
+
+    auto creatureRaw = world->raws.creatures.all[unit->race];
+    auto casteRaw = creatureRaw->caste[unit->caste];
+
+    for (size_t j = 0; j < unit->appearance.tissue_style_type.size(); j++)
+    {
+        auto type = unit->appearance.tissue_style_type[j];
+        if (type < 0)
+            continue;
+        int style_raw_index = binsearch_index(casteRaw->tissue_styles, &df::tissue_style_raw::id, type);
+        auto styleRaw = casteRaw->tissue_styles[style_raw_index];
+        if (styleRaw->token == "HAIR")
+        {
+            auto send_style = appearance->mutable_hair();
+            send_style->set_length(unit->appearance.tissue_length[j]);
+            send_style->set_style((HairStyle)unit->appearance.tissue_style[j]);
+        }
+        else if (styleRaw->token == "BEARD")
+        {
+            auto send_style = appearance->mutable_beard();
+            send_style->set_length(unit->appearance.tissue_length[j]);
+            send_style->set_style((HairStyle)unit->appearance.tissue_style[j]);
+        }
+        else if (styleRaw->token == "MOUSTACHE")
+        {
+            auto send_style = appearance->mutable_moustache();
+            send_style->set_length(unit->appearance.tissue_length[j]);
+            send_style->set_style((HairStyle)unit->appearance.tissue_style[j]);
+        }
+        else if (styleRaw->token == "SIDEBURNS")
+        {
+            auto send_style = appearance->mutable_sideburns();
+            send_style->set_length(unit->appearance.tissue_length[j]);
+            send_style->set_style((HairStyle)unit->appearance.tissue_style[j]);
+        }
+    }
+
+    for (size_t j = 0; j < unit->inventory.size(); j++)
+    {
+        auto inventory_item = unit->inventory[j];
+        auto sent_item = send_unit->add_inventory();
+        sent_item->set_mode((InventoryMode)inventory_item->mode);
+        CopyItem(sent_item->mutable_item(), inventory_item->item);
+    }
+
+    if (unit->flags1.bits.projectile)
+    {
+        for (auto proj = world->proj_list.next; proj != NULL; proj = proj->next)
+        {
+            STRICT_VIRTUAL_CAST_VAR(item, df::proj_unitst, proj->item);
+            if (item == NULL)
+                continue;
+            if (item->unit != unit)
+                continue;
+            send_unit->set_subpos_x(item->pos_x / 100000.0);
+            send_unit->set_subpos_y(item->pos_y / 100000.0);
+            send_unit->set_subpos_z(item->pos_z / 140000.0);
+        }
+    }
 }
 
 static command_result GetViewInfo(color_ostream &stream, const EmptyMessage *in, ViewInfo *out)
