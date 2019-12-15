@@ -1760,6 +1760,14 @@ static command_result GetUnitListInside(color_ostream &stream, const BlockReques
             }
         }
 
+        df::map_block * map_block = Maps::getTileBlock(unit->pos);
+        if (map_block) {
+            const df::tile_designation &designation = map_block->designation[unit->pos.x % 16][unit->pos.y % 16];
+            send_unit->set_light(designation.bits.light);
+            send_unit->set_subterranean(designation.bits.subterranean);
+            send_unit->set_outside(designation.bits.outside);
+        }
+
         auto appearance = send_unit->mutable_appearance();
         for (size_t j = 0; j < unit->appearance.body_modifiers.size(); j++)
             appearance->add_body_modifiers(unit->appearance.body_modifiers[j]);
