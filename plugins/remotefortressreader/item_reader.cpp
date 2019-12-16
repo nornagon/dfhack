@@ -26,6 +26,7 @@
 #include "df/item_statuest.h"
 #include "df/item_threadst.h"
 #include "df/item_toolst.h"
+#include "df/itemdef_armorst.h"
 #include "df/itemdef_instrumentst.h"
 #include "df/itemdef_toolst.h"
 #include "df/itemimprovement.h"
@@ -157,6 +158,10 @@ void CopyItem(RemoteFortressReader::Item * NetItem, df::item * DfItem)
     NetItem->set_id(DfItem->id);
     NetItem->set_flags1(DfItem->flags.whole);
     NetItem->set_flags2(DfItem->flags2.whole);
+    NetItem->set_description(DF2UTF(Items::getDescription(DfItem)));
+    NetItem->set_quality(DfItem->getQuality());
+    NetItem->set_improvement_quality(DfItem->getImprovementQuality());
+    NetItem->set_is_improved(DfItem->isImproved());
     auto pos = NetItem->mutable_pos();
     pos->set_x(DfItem->pos.x);
     pos->set_y(DfItem->pos.y);
@@ -523,6 +528,7 @@ DFHack::command_result GetItemList(DFHack::color_ostream &stream, const DFHack::
         mat_def->mutable_mat_pair()->set_mat_type((int)it);
         mat_def->mutable_mat_pair()->set_mat_index(-1);
         mat_def->set_id(ENUM_KEY_STR(item_type, it));
+        mat_def->set_name(DF2UTF(ItemTypeInfo(it, -1).toString()));
         switch (it)
         {
         case df::enums::item_type::GEM:
@@ -549,6 +555,7 @@ DFHack::command_result GetItemList(DFHack::color_ostream &stream, const DFHack::
                 mat_def->mutable_mat_pair()->set_mat_type((int)it);
                 mat_def->mutable_mat_pair()->set_mat_index(plantRaw->index);
                 mat_def->set_id(ENUM_KEY_STR(item_type, it) + "/" + plantRaw->id);
+                mat_def->set_name(plantRaw->name);
             }
             break;
         }
@@ -660,13 +667,11 @@ DFHack::command_result GetItemList(DFHack::color_ostream &stream, const DFHack::
                     send_instrument->set_description(DF2UTF(instrument->description));
                     break;
                 }
-                case df::enums::item_type::TOOL:
-                {
-                    VIRTUAL_CAST_VAR(tool, df::itemdef_toolst, item);
-                    mat_def->set_name(DF2UTF(tool->name));
-                }
                 default:
+                {
+                    mat_def->set_name(DF2UTF(ItemTypeInfo(it, i).toString()));
                     break;
+                }
                 }
             }
         }
