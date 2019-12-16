@@ -1778,6 +1778,7 @@ void CopyUnit(RemoteFortressReader::UnitDefinition * send_unit, df::unit * unit)
         send_unit->mutable_current_job()->set_histfig_id(current_job->hist_figure_id);
         send_unit->mutable_current_job()->set_material_category(current_job->material_category.whole);
         send_unit->mutable_current_job()->set_reaction_name(current_job->reaction_name);
+        send_unit->mutable_current_job()->set_description(Job::getDescription(current_job));
         for (df::job_item_ref* job_item : current_job->items)
         {
             auto send_item = send_unit->mutable_current_job()->add_items();

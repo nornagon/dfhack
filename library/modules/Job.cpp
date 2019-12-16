@@ -642,3 +642,22 @@ std::string Job::getName(df::job *job)
 
     return desc;
 }
+
+void df_job_get_description(df::job* job, string* out_str)
+{
+    static auto* const fn =
+        reinterpret_cast<void(THISCALL *)(df::job*, string*)>(
+            Core::getInstance().vinfo->getAddress("job::getDescription(std::string*)"));
+    if (fn)
+        fn(job, out_str);
+    else
+        *out_str = "";
+}
+
+std::string Job::getDescription(df::job *job)
+{
+    CHECK_NULL_POINTER(job);
+    std::string desc;
+    df_job_get_description(job, &desc);
+    return desc;
+}
