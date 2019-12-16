@@ -32,6 +32,8 @@
 #include "modules/World.h"
 
 #include "df/unit_action.h"
+#include "df/activity_entry.h"
+#include "df/activity_event.h"
 #if DF_VERSION_INT > 34011
 #include "df/army.h"
 #include "df/army_flags.h"
@@ -1780,6 +1782,38 @@ void CopyUnit(RemoteFortressReader::UnitDefinition * send_unit, df::unit * unit)
         {
             auto send_item = send_unit->mutable_current_job()->add_items();
             CopyItem(send_item, job_item->item);
+        }
+    }
+
+    for (int32_t activity_id : unit->social_activities) {
+        df::activity_entry* activity = df::activity_entry::find(activity_id);
+        if (activity) {
+            auto send_activity = send_unit->add_social_activities();
+            send_activity->set_id(activity->id);
+            send_activity->set_type(activity->type);
+            for (df::activity_event* activity_event : activity->events) {
+                auto send_activity_event = send_activity->add_events();
+                send_activity_event->set_id(activity_event->event_id);
+                send_activity_event->set_parent_event_id(activity_event->parent_event_id);
+                send_activity_event->set_type(activity_event->getType());
+                activity_event->getName(unit->id, send_activity_event->mutable_name());
+            }
+        }
+    }
+
+    for (int32_t activity_id : unit->activities) {
+        df::activity_entry* activity = df::activity_entry::find(activity_id);
+        if (activity) {
+            auto send_activity = send_unit->add_activities();
+            send_activity->set_id(activity->id);
+            send_activity->set_type(activity->type);
+            for (df::activity_event* activity_event : activity->events) {
+                auto send_activity_event = send_activity->add_events();
+                send_activity_event->set_id(activity_event->event_id);
+                send_activity_event->set_parent_event_id(activity_event->parent_event_id);
+                send_activity_event->set_type(activity_event->getType());
+                activity_event->getName(unit->id, send_activity_event->mutable_name());
+            }
         }
     }
 
