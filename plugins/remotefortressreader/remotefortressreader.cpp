@@ -1834,7 +1834,7 @@ void CopyUnit(RemoteFortressReader::UnitDefinition * send_unit, df::unit * unit)
         appearance->add_colors(unit->appearance.colors[j]);
     appearance->set_size_modifier(unit->appearance.size_modifier);
 
-    appearance->set_physical_description(Units::getPhysicalDescription(unit));
+    appearance->set_physical_description(DF2UTF(Units::getPhysicalDescription(unit)));
 
     send_unit->set_profession_id(unit->profession);
 
