@@ -1835,7 +1835,13 @@ void CopyUnit(RemoteFortressReader::UnitDefinition * send_unit, df::unit * unit)
         appearance->add_colors(unit->appearance.colors[j]);
     appearance->set_size_modifier(unit->appearance.size_modifier);
 
+    // The description is stably random based on the tick, but that changes
+    // faster than we'd like. So we temporarily fake the tick so we only get a
+    // different random descriptions every 1000 ticks instead of every tick.
+    int32_t saved_tick = *df::global::cur_year_tick;
+    *df::global::cur_year_tick /= 1000;
     appearance->set_physical_description(DF2UTF(Units::getPhysicalDescription(unit)));
+    *df::global::cur_year_tick = saved_tick;
 
     send_unit->set_profession_id(unit->profession);
 
