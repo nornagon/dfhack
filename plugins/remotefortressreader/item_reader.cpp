@@ -433,6 +433,7 @@ void CopyItem(RemoteFortressReader::Item * NetItem, df::item * DfItem)
     if (actual_item)
     {
         NetItem->set_stack_size(actual_item->stack_size);
+        NetItem->set_wear(actual_item->wear);
     }
 
     VIRTUAL_CAST_VAR(constructed_item, df::item_constructed, DfItem);
