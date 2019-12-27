@@ -16,6 +16,7 @@
 #include "df/art_image_property_intransitive_verbst.h"
 #include "df/art_image_property_transitive_verbst.h"
 #include "df/art_image_ref.h"
+#include "df/artifact_record.h"
 #include "df/descriptor_shape.h"
 #include "df/instrument_piece.h"
 #include "df/instrument_register.h"
@@ -46,6 +47,7 @@
 #include "modules/Items.h"
 #include "modules/MapCache.h"
 #include "modules/Materials.h"
+#include "modules/Translation.h"
 #include "MiscUtils.h"
 
 
@@ -172,6 +174,14 @@ void CopyItem(RemoteFortressReader::Item * NetItem, df::item * DfItem)
     auto type = NetItem->mutable_type();
     type->set_mat_type(DfItem->getType());
     type->set_mat_index(DfItem->getSubtype());
+
+    for (const auto& general_ref : DfItem->general_refs)
+    {
+        df::artifact_record *artifact = general_ref->getArtifact();
+        if (artifact) {
+            NetItem->set_artifact_name(DF2UTF(Translation::TranslateName(&artifact->name)));
+        }
+    }
 
     bool isProjectile = false;
 
