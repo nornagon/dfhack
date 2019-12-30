@@ -1824,6 +1824,7 @@ void CopyUnit(RemoteFortressReader::UnitDefinition * send_unit, df::unit * unit)
         send_unit->set_light(designation.bits.light);
         send_unit->set_subterranean(designation.bits.subterranean);
         send_unit->set_outside(designation.bits.outside);
+        send_unit->set_tile_type(map_block->tiletype[unit->pos.x % 16][unit->pos.y % 16]);
     }
 
     auto appearance = send_unit->mutable_appearance();

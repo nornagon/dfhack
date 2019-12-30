@@ -3,6 +3,8 @@
 #include "VersionInfo.h"
 #include "ItemdefInstrument.pb.h"
 
+#include <string>
+
 #include "df/art_image.h"
 #include "df/art_image_chunk.h"
 #include "df/art_image_element.h"
@@ -18,6 +20,7 @@
 #include "df/art_image_ref.h"
 #include "df/artifact_record.h"
 #include "df/descriptor_shape.h"
+#include "df/historical_figure.h"
 #include "df/instrument_piece.h"
 #include "df/instrument_register.h"
 #include "df/item_type.h"
@@ -41,6 +44,8 @@
 #include "df/itemimprovement_threadst.h"
 #include "df/itemdef.h"
 #include "df/map_block.h"
+#include "df/spatter_common.h"
+#include "df/spatter.h"
 #include "df/vehicle.h"
 #include "df/world.h"
 
@@ -153,6 +158,30 @@ void CopyImage(const df::art_image * image, ArtImage * netImage)
             break;
         }
     }
+}
+
+void df_spatter_get_description(df::spatter_common* spatter_common, std::string* out_str)
+{
+    static auto* const fn =
+        reinterpret_cast<void(THISCALL *)(df::spatter_common*, std::string*)>(
+            Core::getInstance().vinfo->getAddress("spatter_common::getDescription(std::string*)"));
+    CHECK_NULL_POINTER(fn);
+    fn(spatter_common, out_str);
+}
+
+static void CopyMat(RemoteFortressReader::MatPair * mat, int type, int index)
+{
+    if (type >= MaterialInfo::FIGURE_BASE && type < MaterialInfo::PLANT_BASE)
+    {
+        df::historical_figure * figure = df::historical_figure::find(index);
+        if (figure)
+        {
+            type -= MaterialInfo::GROUP_SIZE;
+            index = figure->race;
+        }
+    }
+    mat->set_mat_type(type);
+    mat->set_mat_index(index);
 }
 
 void CopyItem(RemoteFortressReader::Item * NetItem, df::item * DfItem)
@@ -444,6 +473,16 @@ void CopyItem(RemoteFortressReader::Item * NetItem, df::item * DfItem)
     {
         NetItem->set_stack_size(actual_item->stack_size);
         NetItem->set_wear(actual_item->wear);
+
+        if (actual_item->contaminants) {
+            for (const auto& spatter : *actual_item->contaminants) {
+                auto netSpatter = NetItem->add_contaminants();
+                CopyMat(netSpatter->mutable_material(), spatter->mat_type, spatter->mat_index);
+                netSpatter->set_amount(spatter->size);
+                netSpatter->set_state((MatterState)spatter->mat_state);
+                df_spatter_get_description(spatter, netSpatter->mutable_description());
+            }
+        }
     }
 
     VIRTUAL_CAST_VAR(constructed_item, df::item_constructed, DfItem);
